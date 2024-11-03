@@ -20,7 +20,8 @@ CHATBOT: זה נהדר! איזה יופי ששאלת את זה. מה תרצה ל
 
 """
 
-TEST_QUERY = """כמה היא עולה"""
+TEST_QUERY = """כמה היא עולה?"""
+TEST_QUERY2 = """מי ספק?"""
 
 USER_PROMPT = """
 {query}

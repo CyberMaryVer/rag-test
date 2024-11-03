@@ -102,7 +102,7 @@ def clear_history():
 
 @st.fragment
 def show_history():
-    with st.expander("Chat History", expanded=True):
+    with st.expander("Chat History", expanded=False):
         for message in st.session_state.messages:
             st.write(message)
     return len(st.session_state.messages)
@@ -110,6 +110,7 @@ def show_history():
 def display_chat():
     col1, col2 = st.columns((2, 1))
     found_documents = []
+    input_placeholder = st.empty()
 
     with col2:
         len_history = show_history()
@@ -117,14 +118,12 @@ def display_chat():
         if len_history > 0:
             st.warning(f"Pay attention, chat history is not empty, there are {len_history} messages in history")
 
-        if st.button("Reset History"):
-            clear_history()
-
     with col1:
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
-        if prompt := st.chat_input("..."):
+
+        if prompt := input_placeholder.chat_input("..."):
             st.session_state.messages.append({"role": "user", "content": prompt})
             # Write user prompt
             with st.chat_message("user"):
@@ -149,10 +148,22 @@ def display_chat():
                     content = generated_response['choices'][0]['message']['content']
                     st.success(f"LLM Answer: {content}")
             st.session_state.messages.append({"role": "assistant", "content": content})
+
     with col2:
-        for doc in found_documents:
-            st.markdown(f"ID: **{doc['doc_id']}** | Score: **{doc['score']}**")
+        st.info("First document from search results")
+        for idx, doc in enumerate(found_documents[:1]):
+            html = f"""
+    <p style="margin-bottom: 10px; padding: 10px; border-bottom: 1px solid #ddd;">
+        <strong style="background-color: #f0f8ff; color: #0056b3; padding: 4px; border-radius: 4px;">ID: {doc['doc_id']}</strong> | 
+        <strong style="background-color: #ffe4b5; color: #d2691e; padding: 4px; border-radius: 4px;">Score: {doc['score']:.2f}</strong>
+    </p>
+            """
+            st.markdown(html, unsafe_allow_html=True)
             st.text(doc['passage'])
+
+        with st.expander("All documents used for generation", expanded=False):
+            st.write(found_documents)
+
 
 
 if __name__ == "__main__":
