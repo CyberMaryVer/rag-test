@@ -12,6 +12,9 @@ load_dotenv(find_dotenv())
 
 INDEX_NAME = 'clalit-ai-poc'
 
+st.set_page_config(page_title=None, page_icon=":home:", layout="wide", initial_sidebar_state="auto", menu_items=None)
+st.session_state['rag_config_ready'] = False
+
 def configurate_rag():
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -23,29 +26,34 @@ def configurate_rag():
         url = st.text_input("URL", os.getenv("PROJECT_URL"))
         api_key = st.text_input("API_KEY", os.getenv("API_KEY"))
         elastic_config = st.file_uploader("Upload ElasticSearch Config File", type="json")
+    st.session_state['llm'] = get_llm_engine(project_id=project_id, api_key=api_key, url=url)
+    st.session_state['embed'] = get_emb_engine(project_id=project_id, api_key=api_key, url=url)
 
-    if elastic_config is None:
+    if elastic_config is not None:
+        config = json.load(elastic_config)
+        st.session_state['es'] = get_es_engine(config)
+
+    if elastic_config is None and 'es' not in st.session_state.keys():
         st.error("ElasticSearch Config File should be uploaded")
+        st.session_state['rag_config_ready'] = False
 
     elif not project_id:
         st.error("PROJECT_ID is required")
+        st.session_state['rag_config_ready'] = False
 
     elif not url:
         st.error("URL is required")
+        st.session_state['rag_config_ready'] = False
 
     elif not api_key:
         st.error("API_KEY is required")
+        st.session_state['rag_config_ready'] = False
 
     elif not st.session_state.get('index_name'):
         st.error("INDEX NAME is required")
 
     else:
-        config = json.load(elastic_config)
-        # st.json(config)
-        st.session_state['es'] = get_es_engine(config)
-        st.session_state['llm'] = get_llm_engine(project_id=project_id, api_key=api_key, url=url)
-        st.session_state['embed'] = get_emb_engine(project_id=project_id, api_key=api_key, url=url)
-        return True
+        st.session_state['rag_config_ready'] = True
 
 def main():
     history = st.text_area("HISTORY", TEST_HISTORY)
@@ -82,6 +90,78 @@ def main():
                 answer_placeholder.success(f"LLM Answer: {content}")
 
 
+def combine_history(limit=5):
+    history = ""
+    for message in st.session_state.messages[-limit:]:
+        history += message['role'].upper() + ": " + message["content"] + "\n"
+    return history
+
+@st.fragment
+def clear_history():
+    st.session_state.messages = []
+
+@st.fragment
+def show_history():
+    with st.expander("Chat History", expanded=True):
+        for message in st.session_state.messages:
+            st.write(message)
+    return len(st.session_state.messages)
+
+def display_chat():
+    col1, col2 = st.columns((2, 1))
+    found_documents = []
+
+    with col2:
+        len_history = show_history()
+
+        if len_history > 0:
+            st.warning(f"Pay attention, chat history is not empty, there are {len_history} messages in history")
+
+        if st.button("Reset History"):
+            clear_history()
+
+    with col1:
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+        if prompt := st.chat_input("..."):
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            # Write user prompt
+            with st.chat_message("user"):
+                st.markdown(prompt)
+            # Write LLM response
+            with st.chat_message("assistant"):
+                history = combine_history()
+                search_query = history + "\n\n" + prompt
+                found_documents = search_text_in_elastic(text=search_query,
+                                                         embedding=st.session_state['embed'],
+                                                         search_engine=st.session_state['es'],
+                                                         index=st.session_state['index_name'],
+                                                         search_size=st.session_state['chunks_num'],
+                                                         verbose=False)
+                messages = [
+                    {"role": "system", "content": SYSTEM_PROMPT.format(history=history, docs=found_documents)},
+                    {"role": "user", "content": USER_PROMPT.format(query=prompt)}
+                ]
+
+                with st.spinner("Wait for LLM response..."):
+                    generated_response = st.session_state['llm'].chat(messages=messages)
+                    content = generated_response['choices'][0]['message']['content']
+                    st.success(f"LLM Answer: {content}")
+            st.session_state.messages.append({"role": "assistant", "content": content})
+    with col2:
+        for doc in found_documents:
+            st.markdown(f"ID: **{doc['doc_id']}** | Score: **{doc['score']}**")
+            st.text(doc['passage'])
+
+
 if __name__ == "__main__":
-    if configurate_rag():
-        main()
+    start = st.button("Restart Session")
+    if start:
+        clear_history()
+
+    if not st.session_state['rag_config_ready']:
+        configurate_rag()
+    else:
+        st.write(st.session_state['rag_config_ready'])
+    display_chat()

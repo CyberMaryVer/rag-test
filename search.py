@@ -39,8 +39,8 @@ def hybrid_search(query_embedding,
                   text_query,
                   search_engine,
                   index_name,
-                  bm25_weight=0.5,
-                  vector_weight=0.5,
+                  bm25_weight=0.2,
+                  vector_weight=0.8,
                   size=10,
                   verbose=True):
     # Run BM25 search
