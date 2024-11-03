@@ -12,11 +12,6 @@ load_dotenv(find_dotenv())
 
 INDEX_NAME = 'clalit-ai-poc'
 
-# Load configuration from elastic.json
-with open('elastic.json') as config_file:
-    config = json.load(config_file)
-# es = get_es_engine(config)
-
 def configurate_rag():
     if "messages" not in st.session_state:
         st.session_state.messages = []
