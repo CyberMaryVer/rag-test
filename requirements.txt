@@ -1,0 +1,7 @@
+ibm-watsonx-ai
+scikit-learn
+matplotlib
+elasticsearch
+streamlit
+loguru
+python-dotenv

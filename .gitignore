@@ -1,0 +1,5 @@
+*.pem
+.venv/
+.idea/
+.env
+elastic.json
