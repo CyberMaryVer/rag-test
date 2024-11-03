@@ -4,7 +4,7 @@ import streamlit as st
 
 from es_connector import get_es_engine
 from vectorization import search_text_in_elastic
-from generation import get_llm_engine, get_emb_engine
+from generation import get_llm_engine, get_emb_engine, MODEL_IDS
 from prompts import SYSTEM_PROMPT, TEST_QUERY, TEST_HISTORY, USER_PROMPT
 
 from dotenv import find_dotenv, load_dotenv
@@ -18,15 +18,22 @@ st.session_state['rag_config_ready'] = False
 def configurate_rag():
     if "messages" not in st.session_state:
         st.session_state.messages = []
+    if 'found_documents' not in st.session_state:
+        st.session_state.found_documents = []
 
     with st.expander("Search settings"):
+        st.markdown("#### Search:")
         st.session_state['chunks_num'] = st.number_input("NUMBER OF DOCUMENTS", min_value=1, max_value=10, value=6)
         st.session_state['index_name'] = st.text_input("INDEX NAME", INDEX_NAME)
+        st.session_state['BM25_weight'] = st.number_input("BM25 SEARCH WEIGHT", min_value=0., max_value=1., step=0.1, value=0.4)
+        model_id = st.selectbox("LLM MODEL ID", MODEL_IDS)
+        st.markdown("#### Credentials:")
         project_id = st.text_input("PROJECT_ID", os.getenv("PROJECT_ID"))
         url = st.text_input("URL", os.getenv("PROJECT_URL"))
         api_key = st.text_input("API_KEY", os.getenv("API_KEY"))
         elastic_config = st.file_uploader("Upload ElasticSearch Config File", type="json")
-    st.session_state['llm'] = get_llm_engine(project_id=project_id, api_key=api_key, url=url)
+
+    st.session_state['llm'] = get_llm_engine(project_id=project_id, api_key=api_key, url=url, model_id=model_id)
     st.session_state['embed'] = get_emb_engine(project_id=project_id, api_key=api_key, url=url)
 
     if elastic_config is not None:
@@ -70,9 +77,10 @@ def main():
                                                      search_engine=st.session_state['es'],
                                                      index=st.session_state['index_name'] ,
                                                      search_size=st.session_state['chunks_num'],
-                                                     verbose=True)
+                                                     bm25_weight=st.session_state['BM25_weight'])
+            st.session_state['found_documents'] = found_documents
 
-        for doc in found_documents:
+        for doc in st.session_state['found_documents']:
             st.markdown(f"ID: **{doc['doc_id']}** | Score: **{doc['score']}**")
             st.text(doc['passage'])
 
@@ -99,6 +107,7 @@ def combine_history(limit=5):
 @st.fragment
 def clear_history():
     st.session_state.messages = []
+    st.session_state.found_documents = []
 
 @st.fragment
 def show_history():
@@ -128,8 +137,11 @@ def display_chat():
             # Write user prompt
             with st.chat_message("user"):
                 st.markdown(prompt)
+
             # Write LLM response
             with st.chat_message("assistant"):
+
+                # RAG
                 history = combine_history()
                 search_query = history + "\n\n" + prompt
                 found_documents = search_text_in_elastic(text=search_query,
@@ -138,6 +150,9 @@ def display_chat():
                                                          index=st.session_state['index_name'],
                                                          search_size=st.session_state['chunks_num'],
                                                          verbose=False)
+                st.session_state['found_documents'] = found_documents
+
+                # Generation
                 messages = [
                     {"role": "system", "content": SYSTEM_PROMPT.format(history=history, docs=found_documents)},
                     {"role": "user", "content": USER_PROMPT.format(query=prompt)}
@@ -146,12 +161,12 @@ def display_chat():
                 with st.spinner("Wait for LLM response..."):
                     generated_response = st.session_state['llm'].chat(messages=messages)
                     content = generated_response['choices'][0]['message']['content']
-                    st.success(f"LLM Answer: {content}")
+                    st.markdown(f"LLM Answer: {content}")
             st.session_state.messages.append({"role": "assistant", "content": content})
 
     with col2:
         st.info("First document from search results")
-        for idx, doc in enumerate(found_documents[:1]):
+        for idx, doc in enumerate(st.session_state['found_documents'][:1]):
             html = f"""
     <p style="margin-bottom: 10px; padding: 10px; border-bottom: 1px solid #ddd;">
         <strong style="background-color: #f0f8ff; color: #0056b3; padding: 4px; border-radius: 4px;">ID: {doc['doc_id']}</strong> | 

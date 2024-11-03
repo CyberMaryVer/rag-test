@@ -7,7 +7,7 @@ def vector_search(query_embedding,
                   search_engine,
                   index_name,
                   size=10,
-                  verbose=True
+                  verbose=False
                   ):
     # Run vector similarity search
     search_body = {
@@ -42,7 +42,7 @@ def hybrid_search(query_embedding,
                   bm25_weight=0.2,
                   vector_weight=0.8,
                   size=10,
-                  verbose=True):
+                  verbose=False):
     # Run BM25 search
     bm25_body = {
         "size": size,
