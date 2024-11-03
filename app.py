@@ -27,6 +27,18 @@ def configurate_rag():
     if elastic_config is None:
         st.error("ElasticSearch Config File should be uploaded")
 
+    elif not project_id:
+        st.error("PROJECT_ID is required")
+
+    elif not url:
+        st.error("URL is required")
+
+    elif not api_key:
+        st.error("API_KEY is required")
+
+    elif not st.session_state.get('index_name'):
+        st.error("INDEX NAME is required")
+
     else:
         config = json.load(elastic_config)
         # st.json(config)
